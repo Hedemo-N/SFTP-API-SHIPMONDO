@@ -3,7 +3,6 @@ import supabase from "../lib/supabaseClient";
 
 function mapOrderType(productCode: string): string {
   const mapping: Record<string, string> = {
-   
     "Hemleverans kväll 17-22": "kvällsleverans",
     "Ombud/ Paketskåpsleverans": "ombud"
   };
@@ -11,31 +10,45 @@ function mapOrderType(productCode: string): string {
 }
 
 export default async function handler(req, res) {
+  console.log("🚀 API anropad:", new Date().toISOString());
+  
   const client = new SFTP();
 
   try {
+    console.log("📡 Försöker ansluta till SFTP...");
+    console.log("Host:", process.env.SFTP_HOST);
+    console.log("User:", process.env.SFTP_USER);
+    
     await client.connect({
       host: process.env.SFTP_HOST,
       port: 22,
       username: process.env.SFTP_USER,
       password: process.env.SFTP_PASSWORD
     });
+    
+    console.log("✅ SFTP ansluten!");
 
+    console.log("📂 Listar filer i /incoming...");
     const files = await client.list("/incoming");
+    console.log("📄 Hittade filer:", files.map(f => f.name));
+    
     const processedOrders = [];
 
     for (const file of files) {
-      if (!file.name.endsWith(".json")) continue;
+      if (!file.name.endsWith(".json")) {
+        console.log("⏭️ Hoppar över (inte JSON):", file.name);
+        continue;
+      }
 
+      console.log("📖 Läser fil:", file.name);
       const filePath = `/incoming/${file.name}`;
       const buffer = await client.get(filePath);
       const json = JSON.parse(buffer.toString());
+      console.log("📦 Order ID:", json.id, "Shipment:", json.shipment_number);
 
-      // Hitta mottagaren
       const receiver = json.parties.find((p: any) => p.type === "receiver");
       const packageInfo = json.packages?.[0];
 
-      // Transformera till ditt format
       const order = {
         order_type: mapOrderType(json.product_code),
         name: receiver?.name || "",
@@ -47,20 +60,25 @@ export default async function handler(req, res) {
         numberofkollin: packageInfo?.number || 1,
         source: "shipmondo"
       };
+      
+      console.log("💾 Sparar till Supabase:", order);
 
-      // Spara till Supabase
       const { error } = await supabase.from("orders").insert(order);
 
       if (error) {
-        console.error("Supabase error:", error);
+        console.error("❌ Supabase error:", error);
       } else {
+        console.log("✅ Order sparad!");
         processedOrders.push(order);
-        // Flytta processad fil
+        
+        console.log("📁 Flyttar fil till /processed...");
         await client.rename(filePath, `/processed/${file.name}`);
+        console.log("✅ Fil flyttad!");
       }
     }
 
     await client.end();
+    console.log("🏁 Klar! Processade:", processedOrders.length, "ordrar");
 
     return res.status(200).json({
       count: processedOrders.length,
@@ -68,7 +86,8 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("SFTP ERROR:", err);
+    console.error("💥 FEL:", err);
+    await client.end().catch(() => {});
     return res.status(500).json({ error: err.message });
   }
 }
