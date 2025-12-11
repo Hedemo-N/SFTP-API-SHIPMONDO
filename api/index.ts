@@ -65,17 +65,18 @@ export default async function handler(req, res) {
       }
 
       const order = {
-        order_type: mapOrderType(json.product_code),
-        name: receiver?.name || "",
-        address1: receiver?.address1 || "",
-        order_id: json.shipment_number,
-        status: "kommande",
-        postalnumber: receiver?.postal_code || "",
-        city: receiver?.city || "",
-        numberofkollin: packageInfo?.number || 1,
-        source: "shipmondo",
-        user_id: profile?._id || null
-      };
+  order_type: mapOrderType(json.product_code),
+  name: receiver?.name || "",
+  address1: receiver?.address1 || "",
+  order_id: json.shipment_number,
+  status: "kommande",
+  postalnumber: receiver?.postal_code || "",
+  city: receiver?.city || "",
+  numberofkollin: packageInfo?.number || 1,
+  source: "shipmondo",
+  user_id: profile?._id || null,
+  phone: receiver?.phone || ""
+};
       
       console.log("💾 Sparar till Supabase:", order);
 
