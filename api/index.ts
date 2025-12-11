@@ -46,8 +46,23 @@ export default async function handler(req, res) {
       const json = JSON.parse(buffer.toString());
       console.log("📦 Order ID:", json.id, "Shipment:", json.shipment_number);
 
+      const sender = json.parties.find((p: any) => p.type === "sender");
       const receiver = json.parties.find((p: any) => p.type === "receiver");
       const packageInfo = json.packages?.[0];
+
+      // Slå upp butik i profiles baserat på display_name
+      console.log("🔍 Söker efter butik:", sender?.name);
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("_id")
+        .eq("display_name", sender?.name)
+        .single();
+
+      if (profileError) {
+        console.error("⚠️ Kunde inte hitta butik:", profileError.message);
+      } else {
+        console.log("✅ Hittade butik med _id:", profile._id);
+      }
 
       const order = {
         order_type: mapOrderType(json.product_code),
@@ -58,7 +73,8 @@ export default async function handler(req, res) {
         postalnumber: receiver?.postal_code || "",
         city: receiver?.city || "",
         numberofkollin: packageInfo?.number || 1,
-        source: "shipmondo"
+        source: "shipmondo",
+        user_id: profile?._id || null
       };
       
       console.log("💾 Sparar till Supabase:", order);
@@ -90,4 +106,4 @@ export default async function handler(req, res) {
     await client.end().catch(() => {});
     return res.status(500).json({ error: err.message });
   }
-} 
+}
